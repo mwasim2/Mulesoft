@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation" xmlns:cluster="http://www.mulesoft.org/schema/mule/ee/cluster" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:context="http://www.springframework.org/schema/context" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+	<context:property-placeholder location="${env}.properties"/>
+	<db:mysql-config name="MySQL_Configuration" host="${db.host}" port="${db.port}" user="${db.user}" password="${db.password}" database="${db.database}" doc:name="MySQL Configuration"/>
+	<configuration defaultExceptionStrategy-ref="global_exceptionChoice_Exception_Strategy" doc:name="Configuration">
+		<http:config useTransportForUris="false"/>
+	</configuration>
+	<flow name="batch_bulk_file_to_databaseFlow">
+		<file:inbound-endpoint path="src/test/resources/input" pollingFrequency="100" responseTimeout="10000" mimeType="application/csv" doc:name="File"/>
+		<dw:transform-message doc:name="Transform Message" metadata:id="fc939851-7a6f-4d7e-a30d-38e9860e7c66">
+			<dw:input-payload doc:sample="F:\Data\employee.csv" mimeType="application/csv"/>
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload map ((payload01 , indexOfPayload01) -> {
+	custID: payload01.custID,
+	custName: payload01.custName,
+	custSalary: payload01.custSalary,
+	custEmail: payload01.custEmail,
+	custAddress: payload01.custAddress,
+	custPhone: payload01.custPhone
+})]]></dw:set-payload>
+		</dw:transform-message>
+		<validation:is-true message="File not  Found" exceptionClass="java.io.FileNotFoundException" expression="#[payload.size()!=0]" doc:name="Validation"/>
+		<batch:execute name="batch_bulk_file_to_databaseBatch" doc:name="Batch Execute"/>
+	</flow>
+	<batch:job name="batch_bulk_file_to_databaseBatch">
+		<batch:process-records>
+			<batch:step name="Batch_Step">
+				<dw:transform-message doc:name="Transform Message">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+				</dw:transform-message>
+				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[insert into Customer (custID, custName, custEmail, custAddress, custSalary, custPhone) values (#[payload.custID], #[payload.custName], #[payload.custEmail], #[payload.custAddress], #[payload.custSalary], #[payload.custPhone])]]></db:parameterized-query>
+				</db:insert>
+			</batch:step>
+		</batch:process-records>
+		<batch:on-complete>
+			<logger level="INFO" doc:name="Logger"/>
+		</batch:on-complete>
+	</batch:job>
+
+
+</mule>

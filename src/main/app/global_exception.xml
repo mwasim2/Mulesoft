@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:smtp="http://www.mulesoft.org/schema/mule/smtp" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:cluster="http://www.mulesoft.org/schema/mule/ee/cluster" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/smtp http://www.mulesoft.org/schema/mule/smtp/current/mule-smtp.xsd">
+	<configuration defaultExceptionStrategy-ref="global_exceptionChoice_Exception_Strategy" doc:name="Configuration">
+		<http:config useTransportForUris="false"/>
+	</configuration>
+	<smtp:gmail-connector name="Gmail" validateConnections="true" doc:name="Gmail"/>
+	<choice-exception-strategy name="global_exceptionChoice_Exception_Strategy">
+		<catch-exception-strategy when="#[exception.causedExactlyBy(java.io.FileNotFoundException)]" doc:name="FileNotFoundException">
+			<logger message="#[exception.getSummaryMessage()]" level="ERROR" doc:name="Logger"/>
+			<set-variable variableName="Exception summary" value="#[exception.cause]" doc:name="Variable"/>
+			<dw:transform-message doc:name="Transform Message">
+				<dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	"application name": p('app.name'),
+	"Exception Message": flowVars."Exception summary",
+	"time_stamp": now as :string
+}]]></dw:set-payload>
+			</dw:transform-message>
+			<set-payload value="#[message.payloadAs(java.lang.String).toString().replace(&quot;,&quot;,&quot;&quot;).replace(&quot;{&quot;,&quot;\n&quot;).replace(&quot;}&quot;,&quot;\n&quot;)]" doc:name="Set Payload"/>
+			<flow-ref name="global_exceptionSub_Flow" doc:name="Flow Reference"/>
+			<logger message="#[payload]" level="ERROR" doc:name="Logger"/>
+		</catch-exception-strategy>
+		<catch-exception-strategy when="#[exception.causedExactlyBy(java.lang.NullPointerException)]" doc:name="Catch Exception Strategy">
+			<logger message="#[exception.getSummaryMessage]" level="INFO" doc:name="Logger"/>
+			<set-variable variableName="Exception Summary" value="#[exception.cause]" doc:name="Variable"/>
+			<dw:transform-message doc:name="Transform Message">
+				<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	
+	"application name": p('app.name'),
+	"Exception Message": flowVars."Exception summary",
+	"time_stamp": now as :string
+	
+}]]></dw:set-payload>
+			</dw:transform-message>
+			<set-payload value="#[message.payloadAs(java.lang.Class).toString().replace(&quot;,&quot;,&quot;&quot;).replace(&quot;{&quot;,&quot;\n&quot;).replace(&quot;}&quot;,&quot;\n&quot;)]" doc:name="Set Payload"/>
+			<flow-ref name="global_exceptionSub_Flow" doc:name="Flow Reference"/>
+			<logger message="#[payload]" level="ERROR" doc:name="Logger"/>
+		</catch-exception-strategy>
+		<catch-exception-strategy doc:name="Catch Exception Strategy">
+			<logger message="Error" level="ERROR" doc:name="Logger"/>
+		</catch-exception-strategy>
+	</choice-exception-strategy>
+	<sub-flow name="global_exceptionSub_Flow">
+		<set-payload value=" There is Apps generated error INC#[message.id] raised at  #[server.dateTime] on the server #[server.host],  please find the exception details below.   #[payload]   Thanks and Regards....  #[server.userName]" doc:name="Set Payload"/>
+		<copy-attachments attachmentName="Failed Data" doc:name="Attachment"/>
+		<smtp:outbound-endpoint host="smtp.gmail.com" port="587" user="yousufjava03@gmail.com" password="Software@0324" connector-ref="Gmail" to="wasiminfo16@gmail.com" from="yousufinfo03@gmail.com" subject="Test" responseTimeout="10000" doc:name="SMTP"/>
+	</sub-flow>
+</mule>
